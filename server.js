@@ -1,68 +1,68 @@
-import express from "express"
-import fetch from "node-fetch"
+const express = require("express");
+const WebSocket = require("ws");
 
-const app = express()
-app.use(express.json())
-
-const EMAIL = "one-two-call@hotmail.com"
-const PASSWORD = "7b0d4763dd850257c5cc9d07eecb18b4"
+const app = express();
+app.use(express.json());
 
 app.post("/pdms", async (req, res) => {
 
+  const { token, msg } = req.body;
+
+  if (!token || !msg) {
+    return res.status(400).json({ error: "missing token or msg" });
+  }
+
+  const ws = new WebSocket("wss://fids.police.go.th/pdms/api/chat");
+
+  let replied = false;
+
+  ws.on("open", () => {
+
+    ws.send(JSON.stringify({
+      token: token,
+      msg: msg
+    }));
+
+  });
+
+  ws.on("message", (data) => {
+
+    if (replied) return;
+    replied = true;
+
     try {
 
-        const msg = req.body.msg
+      const text = data.toString();
 
-        // LOGIN
-        const login = await fetch("https://fids.police.go.th/pdms/api/auth/login", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                email: EMAIL,
-                password: PASSWORD
-            })
-        })
-
-        const loginData = await login.json()
-
-        const token = loginData.token
-
-        if (!token) {
-            return res.status(500).json({error:"login failed"})
-        }
-
-        // CALL PDMS
-        const pdms = await fetch("https://fids.police.go.th/pdms/api/other/getDna", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                token: token,
-                msg: msg
-            })
-        })
-
-        const data = await pdms.json()
-
-        res.json(data)
+      res.json({
+        msg: text
+      });
 
     } catch (err) {
 
-        res.status(500).json({
-            error: err.toString()
-        })
+      res.json({
+        error: err.toString()
+      });
 
     }
 
-})
+    ws.close();
 
-app.get("/", (req,res)=>{
-    res.send("PDMS API RUNNING")
-})
+  });
 
-app.listen(10000, ()=>{
-    console.log("server started")
-})
+  ws.on("error", (err) => {
+
+    if (replied) return;
+    replied = true;
+
+    res.status(500).json({
+      error: err.toString()
+    });
+
+  });
+
+});
+
+app.listen(10000, () => {
+  console.log("Server running on 10000");
+});
